@@ -1,121 +1,104 @@
-import { useState } from 'react'
-import heroImg from './assets/hero.png'
-import reactLogo from './assets/react.svg'
-import viteLogo from './assets/vite.svg'
-import './App.css'
+import { useState, useEffect } from 'react'
+import { supabase } from './supabaseClient'
+import SignUp from './SignUp'
+import Login from './Login'
+import TutorProfile from './TutorProfile'
+import ParentSearch from './ParentSearch'
+import MyRequests from './MyRequests'
+import TutorDashboard from './TutorDashboard'
 
 function App() {
-  const [count, setCount] = useState(0)
+  const [user, setUser] = useState(null)
+  const [showSignUp, setShowSignUp] = useState(true)
+  const [profileComplete, setProfileComplete] = useState(false)
+  const [checkingProfile, setCheckingProfile] = useState(false)
+  const [loadingSession, setLoadingSession] = useState(true)
+  const [refreshKey, setRefreshKey] = useState(0)
+
+  useEffect(() => {
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      setUser(session ? session.user : null)
+      setLoadingSession(false)
+    })
+
+    const { data: listener } = supabase.auth.onAuthStateChange((_event, session) => {
+      setUser(session ? session.user : null)
+    })
+
+    return () => {
+      listener.subscription.unsubscribe()
+    }
+  }, [])
+
+  useEffect(() => {
+    if (user && user.user_metadata.role === 'tutor') {
+      checkProfile()
+    }
+  }, [user])
+
+  async function checkProfile() {
+    setCheckingProfile(true)
+
+    const { data } = await supabase
+      .from('profiles')
+      .select('id')
+      .eq('user_id', user.id)
+      .maybeSingle()
+
+    setProfileComplete(!!data)
+    setCheckingProfile(false)
+  }
+
+  async function handleLogout() {
+    await supabase.auth.signOut()
+    setUser(null)
+    setProfileComplete(false)
+  }
+
+  if (loadingSession) {
+    return <p>Loading...</p>
+  }
+
+  if (user && user.user_metadata.role === 'tutor' && checkingProfile) {
+    return <p>Loading...</p>
+  }
+
+  if (user && user.user_metadata.role === 'tutor' && !profileComplete) {
+    return <TutorProfile user={user} onSuccess={() => setProfileComplete(true)} />
+  }
+
+  if (user && user.user_metadata.role === 'tutor') {
+    return (
+      <div>
+        <button className="logout-btn" onClick={handleLogout}>Log Out</button>
+        <TutorDashboard user={user} />
+      </div>
+    )
+  }
+
+  if (user && user.user_metadata.role === 'parent') {
+  return (
+    <div>
+      <button className="logout-btn" onClick={handleLogout}>Log Out</button>
+      <ParentSearch onRequestSent={() => setRefreshKey((k) => k + 1)} />
+      <div className="page">
+        <MyRequests key={refreshKey} user={user} />
+      </div>
+    </div>
+  )
+}
 
   return (
-    <>
-      <section id="center">
-        <div className="hero">
-          <img src={heroImg} className="base" width="170" height="179" alt="" />
-          <img src={reactLogo} className="framework" alt="React logo" />
-          <img src={viteLogo} className="vite" alt="Vite logo" />
-        </div>
-        <div>
-          <h1>Get started</h1>
-          <p>
-            Edit <code>src/App.jsx</code> and save to test <code>HMR</code>
-          </p>
-        </div>
-        <button
-          type="button"
-          className="counter"
-          onClick={() => setCount((count) => count + 1)}
-        >
-          Count is {count}
-        </button>
-      </section>
-
-      <div className="ticks"></div>
-
-      <section id="next-steps">
-        <div id="docs">
-          <svg className="icon" role="presentation" aria-hidden="true">
-            <use href="/icons.svg#documentation-icon"></use>
-          </svg>
-          <h2>Documentation</h2>
-          <p>Your questions, answered</p>
-          <ul>
-            <li>
-              <a href="https://vite.dev/" target="_blank">
-                <img className="logo" src={viteLogo} alt="" />
-                Explore Vite
-              </a>
-            </li>
-            <li>
-              <a href="https://react.dev/" target="_blank">
-                <img className="button-icon" src={reactLogo} alt="" />
-                Learn more
-              </a>
-            </li>
-          </ul>
-        </div>
-        <div id="social">
-          <svg className="icon" role="presentation" aria-hidden="true">
-            <use href="/icons.svg#social-icon"></use>
-          </svg>
-          <h2>Connect with us</h2>
-          <p>Join the Vite community</p>
-          <ul>
-            <li>
-              <a href="https://github.com/vitejs/vite" target="_blank">
-                <svg
-                  className="button-icon"
-                  role="presentation"
-                  aria-hidden="true"
-                >
-                  <use href="/icons.svg#github-icon"></use>
-                </svg>
-                GitHub
-              </a>
-            </li>
-            <li>
-              <a href="https://chat.vite.dev/" target="_blank">
-                <svg
-                  className="button-icon"
-                  role="presentation"
-                  aria-hidden="true"
-                >
-                  <use href="/icons.svg#discord-icon"></use>
-                </svg>
-                Discord
-              </a>
-            </li>
-            <li>
-              <a href="https://x.com/vite_js" target="_blank">
-                <svg
-                  className="button-icon"
-                  role="presentation"
-                  aria-hidden="true"
-                >
-                  <use href="/icons.svg#x-icon"></use>
-                </svg>
-                X.com
-              </a>
-            </li>
-            <li>
-              <a href="https://bsky.app/profile/vite.dev" target="_blank">
-                <svg
-                  className="button-icon"
-                  role="presentation"
-                  aria-hidden="true"
-                >
-                  <use href="/icons.svg#bluesky-icon"></use>
-                </svg>
-                Bluesky
-              </a>
-            </li>
-          </ul>
-        </div>
-      </section>
-
-      <div className="ticks"></div>
-      <section id="spacer"></section>
-    </>
+    <div>
+      {showSignUp ? (
+        <SignUp onSuccess={setUser} />
+      ) : (
+        <Login onSuccess={setUser} />
+      )}
+      <button onClick={() => setShowSignUp(!showSignUp)}>
+        {showSignUp ? 'Already have an account? Log in' : "Don't have an account? Sign up"}
+      </button>
+    </div>
   )
 }
 
